@@ -1,0 +1,217 @@
+<!-- livebook:{"persist_outputs":true} -->
+
+# Contracts exploration
+
+## What is contract programming
+
+In contract programming...
+
+## Primitive forms of a contract system in elixir
+
+We may use the match operator to check for the data "shape".
+
+```elixir
+user = %{name: "Raúl", age: 32, of_type: :person}
+```
+
+```output
+%{age: 32, name: "Raúl", of_type: :person}
+```
+
+A good match will just give use the data back.
+
+```elixir
+%{of_type: :person} = user
+```
+
+```output
+%{age: 32, name: "Raúl", of_type: :person}
+```
+
+But a bad shape will raise a `MatchError`.
+
+```elixir
+%{of_type: :name} = user
+```
+
+Matches are great but limited, predicate functions give us more flexibility on the properties we want to check in our data.
+
+```elixir
+# This check only needs of match expressions
+check_shape = fn
+  %{of_type: :person, name: _, age: _} ->
+    :ok
+
+  %{of_type: _} ->
+    raise "sorry, you must be a person"
+
+  %{} ->
+    raise "must contain the keys name, age, of_type"
+
+  _ ->
+    raise "bad input"
+end
+
+# This one may be a match or an expression, but match is good enough
+check_old_enough = fn
+  %{age: age} when age > 18 -> :ok
+  %{age: _age} -> raise "must be old enough"
+end
+
+# This gets hard to do with match only, so we go for conditional logic
+check_starts_with_r = fn %{name: name} ->
+  if String.starts_with?(name, ["R", "r"]),
+    do: :ok,
+    else: raise("name must start with the letter R")
+end
+```
+
+```output
+#Function<44.40011524/1 in :erl_eval.expr/5>
+```
+
+Then checking a user is just a matter of passing through our checkers:
+
+```elixir
+:ok = check_shape.(user)
+:ok = check_old_enough.(user)
+:ok = check_starts_with_r.(user)
+"The user is :ok!"
+```
+
+```output
+"The user is :ok!"
+```
+
+Or composing it with an elixir construct that drives the logic forward:
+
+```elixir
+user = %{name: "Raúl", age: 17, of_type: :person}
+
+with :ok <- check_shape.(user),
+     :ok <- check_old_enough.(user),
+     :ok <- check_starts_with_r.(user),
+     do: "The user is :ok!"
+```
+
+```elixir
+user = %{name: "Saúl", age: 21, of_type: :person}
+
+with :ok <- check_shape.(user),
+     :ok <- check_old_enough.(user),
+     :ok <- check_starts_with_r.(user),
+     do: "The user is :ok!"
+```
+
+```elixir
+user = %{name: "Rohan", age: 22, of_type: :person}
+
+with :ok <- check_shape.(user),
+     :ok <- check_old_enough.(user),
+     :ok <- check_starts_with_r.(user),
+     do: "The user is :ok!"
+```
+
+```output
+"The user is :ok!"
+```
+
+A combination of match and predicates can be a powerful tool for checking our data in a contract-like fashion, however there are a lot of patterns we might use or follow; It would be nice if we also had a unique construct for contract checking.
+
+## Shaping a generic contract checker
+
+We might try something more universal like a predicate checker function:
+
+```elixir
+# A generic checker function may help us unify our assertions
+check = fn data, predicate, error_message ->
+  if predicate.(data),
+    do: :ok,
+    else: raise(error_message)
+end
+
+# Translate our previous handlers to predicate logic
+person? = fn user -> match?(%{of_type: :person, name: _, age: _}, user) end
+old_enough? = fn %{age: age} -> age > 18 end
+starts_with_r? = fn %{name: name} -> String.starts_with?(name, ["R", "r"]) end
+
+# Previous functions would map more or less like
+user = %{name: "Ramiro", age: 22, of_type: :person}
+
+:ok = check.(user, person?, "must be a map of type person")
+:ok = check.(user, old_enough?, "must be old enough")
+:ok = check.(user, starts_with_r?, "name must start with the letter R")
+"The user is :ok!"
+```
+
+```output
+"The user is :ok!"
+```
+
+Our checker now looks a bit more declarative predicate and error come up paired along, making it 
+a bit easier to understand at first glance, as a nice bonus handler logic was reduced to plain 
+functions.
+
+However not all is good, moving the checker to the predicate world limited the richness of error 
+messages that previous handler logic gave us, we're also reducing performance by switching 
+efficient match functions for predicates.
+
+Performance I may live without, but I miss having specific to the point error messages.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Complex errors
+
+Instead of relying on `true | false` predicates, we might want to do our own matcher approach:
+
+```elixir
+# A generic checker function may help us unify our assertions
+check? = fn data, predicate, error_message ->
+  if predicate.(data),
+    do: :ok,
+    else: raise(error_message)
+end
+
+# This checker matches on the passed function
+check! = fn data, matcher ->
+  case matcher.(data) do
+    :ok -> :ok
+    error when is_binary(error) -> raise error
+  end
+end
+
+checker_shape = fn
+  %{of_type: :person, name: _, age: _} -> :ok
+  %{of_type: _} -> "sorry, you must be a person"
+  %{} -> "must contain the keys name, age, of_type"
+  _ -> "bad input"
+end
+
+old_enough? = fn %{age: age} -> age > 18 end
+starts_with_r? = fn %{name: name} -> String.starts_with?(name, ["R", "r"]) end
+
+# Previous functions would map more or less like
+user = %{name: "Ramiro", age: 22, of_type: :person}
+
+:ok = check!.(user, checker_shape)
+:ok = check?.(user, old_enough?, "must be old enough")
+:ok = check?.(user, starts_with_r?, "name must start with the letter R")
+"The user is :ok!"
+```
+
+```output
+"The user is :ok!"
+```
+
+Which... isn't an improvement over the previous initial approach above... while its nice that 
+we ditched the explicit `raise` in each checker, it also feels like we went 2 steps forward and
+1 step backward.
+
+<!-- livebook:{"break_markdown":true} -->
+
+.We don't necessarilly pair up our predicates and error messages in such a limited fashion, by
+applying a data-first approach we might be able to still have a nice spec.
+
+## Dependent checks
+
+## Single interface a macro shell
