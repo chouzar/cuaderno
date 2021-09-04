@@ -1,10 +1,271 @@
 <!-- livebook:{"persist_outputs":true} -->
 
-# Contracts exploration
+# Contract Programming an Elixir approach
 
-## What is contract programming
+## Programming by contract?
 
-In contract programming...
+Is an approach to verification that relies on the succesful execution of our statements;
+to verify the program we run a series of assertions not much different to what we 
+have in [ExUnit](https://hexdocs.pm/ex_unit/ExUnit.html) when we're testing our code.
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule Program do
+  use ExUnit.Case
+
+  def sum_all(numbers), do: Enum.sum(numbers)
+
+  test "transforms to fraction form" do
+    assert sum_all(0..10) == 55
+    assert sum_all([0, 0.25, 0.5, 0.75, 1]) == 1.5
+    refute sum_all(["zero", "hundred"])
+  end
+end
+
+ExUnit.run()
+```
+
+```output
+..
+
+Finished in 0.00 seconds (0.00s async, 0.00s sync)
+2 tests, 0 failures
+
+Randomized with seed 833461
+```
+
+```output
+%{excluded: 0, failures: 0, skipped: 0, total: 2}
+```
+
+Through method we're able to verify that our function abides by the expectations defined
+in our test; however contract programming differns in that our assertions (otherwise called
+contracts) go embedded inside our function.
+
+<!-- livebook:{"break_markdown":true} -->
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule Program do
+  use ExUnit.Case
+
+  def all_numeric?(numbers) do 
+    assert is_list(numbers)
+    Enum.all?(numbers, fn number -> 
+      assert is_number(number)
+      
+    end)
+  end
+
+  test "transforms to fraction form" do
+    assert all_numeric?(0..100)
+    assert all_numeric?([0, 0.25, 0.5, 0.75, 1])
+    refute all_numeric?(["zero", "hundred"])
+  end
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+The assertions we put against our program, represent "a contract" which define our expectations,
+if the component misbehaves the program errors in a sensible way.
+
+## Assertions
+
+An assertion in the context of contract programming or data verification my be synonimous
+with check, property or even a test.
+
+When the assertion works as desired we continue with the flow of data, otherwise when data
+fails to comply to the assertion we "fail" the process.
+
+There are many mechanisms that may mimick assertions in elixir, some of them are more cathered 
+towards program flow but all may be composed into assertions:
+
+* Raising an error with `raise "message"` or `raise CustomExceptionError`
+* Returning an `:error` atom or an `{:error, "message"}` tuple.
+* Returning a structure `CustomError` or exception structure `CustomExceptionError` as data.
+* Using the `assert` keyword through the `ExUnit` test framework.
+
+There are as well many mechanisms for control flow which will aid us in error handling,
+while the point of an assertion is not necessarily to introduce control flow, these
+will help us to build complex functionality:
+
+* Pattern matching on data with multiple shapes `case` or function headers.
+* Using predicates along the `if` and `cond` macros.
+* Composition of complex return values via the `with` clause macro.
+* Error handling via the `try` clause or the `rescue` keyword at the function level.
+* Error handling through processes signals.
+
+Note, this tutorial is not meant to teach or offer advise on how to use the above constructs;
+the real semantics of the above may have other roots but this series tries to exploit them 
+in a way that works along the Contract Programming paradigm, sometimes counter-intuitevly.
+
+## Assertion primitives - Pattern Matching
+
+We generally use assertions to prove properties around our data, for example lets introduce
+the _address_ datatype which we may represent as:
+
+```elixir
+address =
+  {:address, "Mexico", "Baja California", "Tijuana", "22402", "Pacific Hills, Central Park"}
+```
+
+```output
+{:address, "Mexico", "Baja California", "Tijuana", "22402", "Pacific Hills, Central Park"}
+```
+
+In this context, an address is represented by a 6 record tuple denoting the 
+type, country, state, city, postal code, and written address in that order.
+
+Our codebase may manipulate this type very differently depending on the context, but how can we
+guarantee that the binded variable above `address` has the properties we look for? Basic pattern
+matching might give us a way:
+
+```elixir
+# Guarantee that the data is of the right size
+{_, _, _, _, _, _} = address
+
+# Guarantee that first record is always `:address`
+{:address, _, _, _, _, _} = address
+```
+
+```output
+{:address, "Mexico", "Baja California", "Tijuana", "22402", "Pacific Hills, Central Park"}
+```
+
+If we run the above checks with a missing written address:
+
+```elixir
+bad_address = {:address, "Mexico", "Baja California", "Tijuana", "22402"}
+
+# Guarantee that the data is of the right size
+{_, _, _, _, _, _} = bad_address
+
+# Guarantee that first record is always `:address`
+{:address, _, _, _, _, _} = bad_address
+```
+
+Our match fails at first check, it cannot bind a 5 record tuple to the 6 record shape, the 
+behaviour of the match is then to raise a `MatchError` exception, halting the program.
+
+But we don't always need to be so strict with our data, maybe missing a field should not be the
+end of the world for our programs.
+
+## Pattern Matching - Optionality
+
+Sometimes, we just don't want to handle a single representation for our data, we know there may
+be multiple forms of correct data as well as multiple ways in which it can fail; we may use some 
+of the control flow mechanisms in elixir to handle optionality.
+
+```elixir
+address = {:address, "México", "Baja California", "Tijuana", "22402"}
+
+case address do
+  # Guarantee that the data is of the right size and its type :address
+  {:address, _, _, _, _, _} ->
+    :ok
+
+  # Guarantee that the data is of the right size and its type :address
+  {:address, _, _, _, _} ->
+    :ok
+
+  # Any other shape is considered an error
+  _other ->
+    raise "not a valid address record: #{inspect(address)}"
+end
+```
+
+```output
+:ok
+```
+
+Lets convert the above to a function so we may reuse it for other cases:
+
+```elixir
+check_address = fn
+  {:address, _, _, _, _, _} -> :ok
+  {:address, _, _, _, _} -> :ok
+  other -> raise "not a valid address record: #{inspect(other)}"
+end
+```
+
+```output
+#Function<44.40011524/1 in :erl_eval.expr/5>
+```
+
+A 6 digit address record should be no issue for our checker:
+
+```elixir
+address =
+  {:address, "Mexico", "Baja California", "Tijuana", "22402", "Pacific Hills, Central Park"}
+
+:ok = check_address.(address)
+```
+
+```output
+:ok
+```
+
+A 5 digit address record is now also valid:
+
+```elixir
+address = {:address, "Mexico", "Baja California", "Tijuana", "22402"}
+
+:ok = check_address.(address)
+```
+
+```output
+:ok
+```
+
+This form of optional checks also gives us the chance to introduce our own custom errors, 
+a bad shape will raise:
+
+```elixir
+# Finally, a bad type or shape will raise an error
+address = {:addr, "Mexico", "Baja California", "Tijuana"}
+
+:ok = check_address.(address)
+```
+
+We however made a tradeoff, we went from having separate assertions of our data to having a single
+compound checker, so we may see the above more of a single data handler than a set of properties,
+if we wanted to check for different properties in another function or context, we would re-write 
+our checker again.
+
+```elixir
+
+```
+
+```elixir
+check_address = fn address ->
+  case address do
+    {:address, _, _, _, _, _} ->
+      :ok
+
+    {:address, _, _, _, _} ->
+      :ok
+
+    _other ->
+      raise "not a valid address record: #{address}"
+  end
+end
+
+# A 6 record address We consider an addresHere we have a 
+ok_address =
+  {:address, "Mexico", "Baja California", "Tijuana", "22402", "Pacific Hills, Central Park"}
+
+error_address_1 =
+  {:address, "Méjico", "Baja California", "Tijuana", "22402", "Pacific Hills, Central Park"}
+
+error_address_2 = {:direccion, ""}
+```
+
+```output
+{:direccion, ""}
+```
 
 ## Primitive forms of a contract system in elixir
 
@@ -212,6 +473,219 @@ we ditched the explicit `raise` in each checker, it also feels like we went 2 st
 .We don't necessarilly pair up our predicates and error messages in such a limited fashion, by
 applying a data-first approach we might be able to still have a nice spec.
 
+```elixir
+check = fn data, specs ->
+  for {predicate, error_message} <- specs do
+    unless predicate.(data), do: raise(error_message)
+  end
+
+  :ok
+end
+
+# Here each element of the array represents a spec record 
+# composed of a {checker function, "error_message"}
+spec = [
+  {&match?(%{of_type: :person}, &1), "sorry, must be of person type"},
+  {& &1.age, "must have the age field"},
+  {& &1.name, "must have the name field"},
+  {&(&1.age > 18), "must be old enough"},
+  {&String.starts_with?(&1.name, ["R", "r"]), "name must start with the letter R"}
+]
+
+user = %{name: "Ramiro", age: 20, of_type: :person}
+check.(user, spec)
+```
+
+```output
+:ok
+```
+
+```elixir
+check = fn data, specs ->
+  errors =
+    for {predicate, error_message} <- specs, reduce: [] do
+      errors ->
+        if predicate.(data),
+          do: errors,
+          else: [error_message | errors]
+    end
+
+  case errors do
+    [] ->
+      :ok
+
+    errors when is_list(errors) ->
+      errors = Enum.reverse(errors)
+
+      raise """
+      Data doesn't conform to desired specification:
+      #{errors |> Enum.map(&("- " <> &1)) |> Enum.intersperse("\n")}
+
+      Given data:
+      #{inspect(data)}
+      """
+  end
+end
+```
+
+```output
+#Function<43.40011524/2 in :erl_eval.expr/5>
+```
+
+```elixir
+# Here each element of the array represents a spec record 
+# composed of a {checker function, "error_message"}
+spec = [
+  {&match?(%{of_type: :person}, &1), "sorry, must be of person type"},
+  {& &1[:age], "must have the age field"},
+  {& &1[:name], "must have the name field"},
+  {&(&1[:age] > 18), "must be old enough"},
+  {&String.starts_with?(&1.name, ["R", "r"]), "name must start with the letter R"}
+]
+
+user = %{name: "Amiro", age: 16, of_type: :dog}
+check.(user, spec)
+```
+
+<!-- livebook:{"livebook_object":"cell_input","name":"input","type":"text","value":""} -->
+
+```elixir
+check = fn data, specs ->
+  errors =
+    for {bind, predicate, error_message} <- specs, reduce: [] do
+      errors ->
+        cond do
+          !data[bind] ->
+            error_message = "expected #{inspect(bind)} to be binded to the spec"
+            [error_message | errors]
+
+          !predicate.(data) ->
+            [error_message | errors]
+
+          true ->
+            errors
+        end
+    end
+
+  case errors do
+    [] ->
+      :ok
+
+    errors when is_list(errors) ->
+      errors =
+        errors
+        |> Enum.reverse()
+        |> Enum.map(&("- " <> &1))
+        |> Enum.intersperse("\n")
+
+      data =
+        data
+        |> Enum.map(fn {k, v} -> "#{k}: #{inspect(v)}" end)
+        |> Enum.intersperse("\n")
+
+      raise """
+      Data doesn't conform to desired specification:
+      #{errors}
+
+      Evaluated data:
+      #{data}
+      """
+  end
+end
+
+# bind example
+spec = [
+  {:tickets, &(&1 >= 1), "sorry, must be at least 1 ticket"},
+  {:profile, &(&1[:age] && &1[:age] > 18), "sorry must be old enough"},
+  {:profile, &(&1[:name] && Regex.match?(~r/[AEIOUaeiou]/, &1[:name])),
+   "must contain 1 aeiou vowel"}
+]
+
+data_bind = %{
+  # tickets: 2,
+  profile: %{
+    # age: 18,
+    name: "Javier"
+  }
+}
+
+check.(data_bind, spec)
+```
+
+Must track internal runtime errors for raised errors inside anonymous functions.
+
+<!-- livebook:{"break_markdown":true} -->
+
+How to check a dependent contract.
+
+<!-- livebook:{"break_markdown":true} -->
+
+There are a couple of ways in which we may assert our data in elixir:
+
+* By explicitly using pattern matching with `=`.
+* `case` statements and family to match multiple shapes of the same data.
+* By using boolean logic with `and`, `or`, `not`.
+* By using thruthy logic with `&&`, `||`, `!`.
+* By matching with regular expressions.
+
+We could combine the techniques above for more powerful checks:
+
+* By using `predicates` (functions that return either `true` or `false`).
+* By using `Bitwise` operators and then matching on a result.
+* By using the `match?/2` macro.
+* By using the `Regex.match?/2` function.
+
+Ways to return errros:
+
+* rescue
+* aggregatting error messages
+
+<!-- livebook:{"break_markdown":true} -->
+
+How to check one-off contract.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Tests are independent from the component they check from outside while a contract is embedded
+in it and can introspect the whole lifecycle of the component and not only the outside layers.
+
+<!-- livebook:{"break_markdown":true} -->
+
+
+
+```elixir
+
+```
+
+```output
+nil
+```
+
 ## Dependent checks
 
 ## Single interface a macro shell
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule Program do
+  use ExUnit.Case
+
+  @doc "Prints the given values in fraction form ⁰⁄₁"
+  def fraction(numerator, denominator) do
+    # Map each digit to their corresponding super and sub string representation
+    sup = for <<x <- to_string(numerator)>>, into: "", do: <<226, 129, 176 + (x - ?0)>>
+    sub = for <<x <- to_string(denominator)>>, into: "", do: <<226, 130, 128 + (x - ?0)>>
+    IO.chardata_to_string([sup, "⁄", sub])
+  end
+
+  test "transforms to fraction form" do
+    assert fraction(48, 6) == "⁴⁸⁄₆"
+    assert fraction(8, 20) == "⁸⁄₂₀"
+  end
+end
+
+ExUnit.run()
+```
+
+
