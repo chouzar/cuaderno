@@ -1,0 +1,394 @@
+# Contract Programming an Elixir approach - Part 2
+
+## Brief Intro
+
+This is a series that explores the concepts found in Contract Programming and adapts them to 
+the Elixir language; erlang and BEAM languages in general are sorrounded by philosophies like
+"fail fast", "defensive programming" and "offensive programming" and I find that contract 
+programming can be a nice addition to the language.
+
+You will find a lot of unconventional uses of Elixir probably things you would not try
+in a production environment, however through the series I will share some well-established
+Elixir libraries that already do contracts very well.
+
+## Assertion Primitives
+
+In the previous entry of the series we introduced programming by 
+contract and how we can take advantage of the ExUnit's assertion 
+macros as a way to verify not only our tests but our code.
+
+But in this entry of the series I'd like to explore other mechanisms
+for assertion that are closer to the language core, one of them
+being, pattern matching.
+
+## Assertion Primitives - Pattern matching
+
+We know the drill with this operator, it is core to the language
+and an efficient way to assert on the shape of data, bind values
+and the main mechanism to branch-out our logic.
+
+But thinking in terms of contracts I'd like to use it mainly as
+an assertion mechanism.
+
+<!-- livebook:{"break_markdown":true} -->
+
+> The [elixir documentation](https://hexdocs.pm/elixir/patterns-and-guards.html) 
+> as well as other well regarded sources use the word "assert" to describe the 
+> match operator.
+
+<!-- livebook:{"break_markdown":true} -->
+
+This is the example we will be using in thorough this article, it 
+represents an `:address` composed of 5 elements: country, state,
+city, zip code and street.
+
+```elixir
+{:address, "México", "Baja California", "Tijuana", "22402", "Pacific Hills"}
+```
+
+We may discover some interesting properties
+by matching it with a shape:
+
+```elixir
+# Verify that we're indeed working with 5 element address record
+{:address, _, _, _, _, _} =
+  {:address, "México", "Baja California", "Tijuana", "22402", "Pacific Hills"}
+```
+
+Any other shape will also raise a `MatchError`:
+
+```elixir
+{:address, _, _, _, _, _} = {:address, "México", "Baja California", "Tijuana"}
+```
+
+If we try any other type than `:address` the match will raise a `MatchError`:
+
+```elixir
+{:address, _, _, _, _, _} =
+  {:place_in_the_world, "México", "Baja California", "Tijuana", "22402", "Pacific Hills"}
+```
+
+In a sense the shape of our match dictates the 
+properties of our address.
+
+But we don't always need to be so strict with our data, maybe 
+missing a field should not be the end of the world for our 
+programs.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Achieving optionality from pattern matching
+
+Sometimes, we just don't want to handle a single representation 
+for our data, we know there may be multiple forms of correct data 
+as well as multiple ways in which it can fail; we may use some of 
+the control flow mechanisms in elixir to handle optionality.
+
+Lets say that we would like to always match on the country, state 
+and city while zip code and street remain optional.
+
+<!-- livebook:{"livebook_object":"cell_input","name":"Address","props":{"options":["México, Baja California, Tijuana, 22402, Pacific Hills","México, Baja California, Tijuana, 22402","México, Baja California, Tijuana","México, Baja California","México"]},"reactive":true,"type":"select","value":"México, Baja California"} -->
+
+```elixir
+# This block parses our inputs into the address variable
+fields = "Address" |> IO.gets() |> String.split(",") |> Enum.map(&String.trim/1)
+address = List.to_tuple([:address | fields])
+```
+
+```elixir
+case address do
+  {:address, _, _, _, _, _} ->
+    :ok
+
+  {:address, _, _, _, _} ->
+    :ok
+
+  {:address, _, _, _} ->
+    :ok
+
+  _other ->
+    raise "not a valid address record: #{inspect(address)}"
+end
+```
+
+Notice in the above how we're able to match multiple representations
+of a complex type with a `case` statement; various checks are 
+happening:
+
+* Matches a tuple of 4 to 6 fields
+* The 1st element of the tuple is of type `:address`
+
+There's only a single error, so our function expresses an "all or 
+nothing" statement, we may always add more clauses with different
+error messages for added granularity, but this would get complex 
+and repetitive quickly.
+
+We should start taking advantage of other branching constructs, 
+to keep our checks and errors on point.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Getting more granularity from our checks
+
+Other branching constructs like `if`, `cond`, `with`, `when` will 
+help us keep express a series of assertions in a leaner way.
+
+So far our requirements are:
+
+* Check that the type of record is `:address`
+* Country, State, and City are obligatory fields
+* Zip code and Street are optional fields
+
+And a new requirement just came in:
+
+* Zip code should be 5 characters long
+
+Even if we're using a more diverse set of expressions we will try
+to keep our logic withing the bounds of pattern matching, to
+keep code as efficient as possible.
+
+```elixir
+assert_record = fn
+  record when is_tuple(record) and tuple_size(record) > 0 ->
+    :ok
+
+  record ->
+    raise "Record should be represented by a tuple with multiple fields got #{inspect(record)}"
+end
+
+assert_record_type = fn
+  record when elem(record, 0) == :address ->
+    :ok
+
+  _record ->
+    raise "Record can only be of type :address"
+end
+
+assert_obligatory_fields = fn
+  record when tuple_size(record) >= 4 ->
+    :ok
+
+  _record ->
+    raise "Country, State and City are obligatory fields"
+end
+
+assert_zip_code = fn
+  record when tuple_size(record) >= 5 ->
+    case elem(record, 4) do
+      <<_zip_code::binary-size(5)>> ->
+        :ok
+
+      _zip_code ->
+        raise "A Zip Code is limited to 5 characters only"
+    end
+
+  _record ->
+    :ok
+end
+```
+
+> A good rule of thumb when designing how to create our assertions
+> is to look at the kinds of errors we want to get, 1 error per 
+> assertion is a good rule of thumb on how to divide and conquer.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Checking all the properties of our address is now just a matter
+of composing our checks together:
+
+<!-- livebook:{"livebook_object":"cell_input","name":"Address","props":{"options":["México, Baja California, Tijuana, 22402, Pacific Hills","México, Baja California, Tijuana, 2402, Pacific Hills","México, Baja California, Tijuana","México"]},"type":"select","value":"México"} -->
+
+```elixir
+# This block parses our inputs into the address variable
+fields = "Address" |> IO.gets() |> String.split(",") |> Enum.map(&String.trim/1)
+address = List.to_tuple([:address | fields])
+```
+
+```elixir
+:ok = assert_record.(address)
+:ok = assert_record_type.(address)
+:ok = assert_obligatory_fields.(address)
+:ok = assert_zip_code.(address)
+```
+
+With each assertion representing a property of our address record.
+
+So far we have been able to limit the scope of our assertions
+through matches, simple matches can keep our assertions efficient
+however we can only get so far with them; more complex checks
+will rely on runtime logic.
+
+## Assertion Primitives - Predicates
+
+Predicate logic is another great way of doing assertions with very
+simple and sparse logic, lets reimplement the previous exercise
+relying more on `true` or `false` functions.
+
+Because we're not solely relying on matches anymore we have a bit
+more power, so lets make it so the zip code is composed of only
+numeric digits.
+
+```elixir
+check_record_type = fn record ->
+  is_tuple(record) || raise "Record should be represented by a tuple got #{inspect(record)}"
+  tuple_size(record) > 0 || raise "Tuple cannot be empty {}"
+  elem(record, 0) == :address || raise "Record can only be of type :address"
+  :ok
+end
+
+check_obligatory_fields = fn record ->
+  tuple_size(record) >= 4 || raise "Country, State and City are obligatory fields"
+  :ok
+end
+
+check_zip_code = fn record ->
+  if tuple_size(record) >= 5 do
+    zip_code = elem(record, 4)
+    zip_code =~ ~r/^[0-9]{5}$/ || raise "A Zip Code is only composed by 5 numeric digits"
+  end
+
+  :ok
+end
+```
+
+Not much changed with the logic above, aside from being able to 
+add a bit more granularity in our functions, thanks to this we're 
+also able to express some extra detail in our errors.
+
+<!-- livebook:{"livebook_object":"cell_input","name":"Address","props":{"options":["México, Baja California, Tijuana, 22402, Pacific Hills","México, Baja California, Tijuana, 2402","México, Baja California, Tijuana, 24A02","México, Baja California"]},"type":"select","value":"México, Baja California"} -->
+
+```elixir
+# This block parses our inputs into the address variable
+fields = "Address" |> IO.gets() |> String.split(",") |> Enum.map(&String.trim/1)
+address = List.to_tuple([:address | fields])
+```
+
+```elixir
+:ok = check_record.(address)
+:ok = check_record_type.(address)
+:ok = check_obligatory_fields.(address)
+:ok = check_zip_code.(address)
+```
+
+But the big win here is really being able to do more complex 
+assertions through predicates, like our zip code check:
+
+```elixir
+:ok = check_zip_code.({nil, nil, nil, nil, "22A222"})
+```
+
+### Dependendant checks
+
+Lets keep using the previous example to add a new feature, now we
+would like to check that country and state data makes some sense.
+For simplicity sake we will just take a handful of countries and
+cities.
+
+```elixir
+# We only want to check the relation of 4 cities in 2 countries
+check_location = fn record ->
+  countries_db = %{
+    "America" => ["California", "Arizona", "Nevada", "Utah"],
+    "México" => ["Baja California", "Baja California Sur", "Sonora"]
+  }
+
+  country = elem(record, 1)
+  state = elem(record, 2)
+
+  countries_db[country] || raise "That country is not in the database :shrug:"
+  state in countries_db[country] || raise "#{state} is not considered part of #{country}"
+  :ok
+end
+```
+
+Lets try out a few cases:
+
+<!-- livebook:{"livebook_object":"cell_input","name":"Address","props":{"options":["México, Baja California Sur, Tijuana","America, Arizona, Tucson","México, Viejo Tigre, Sabinas","America, Not that Washington, Seattle","USA, Nevada, Henderson"]},"reactive":true,"type":"select","value":"America, Not that Washington, Seattle"} -->
+
+```elixir
+# This block parses our inputs into the address variable
+fields = "Address" |> IO.gets() |> String.split(",") |> Enum.map(&String.trim/1)
+address = List.to_tuple([:address | fields])
+```
+
+```elixir
+:ok = check_location.(address)
+```
+
+Usually we would use a relational database to achieve this, but
+there are cases were we might want to check relations like these
+on business logic.
+
+## Conclusions
+
+* Elixir's match operator `=` can be a limited but performant approach to assertions.
+* Branching logic can be used as a way to validate multiple representations of the same piece of data.
+* Predicate logic and other constructs can reduce the complexity of our assertions by having full access to the language.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### More info on contracts
+
+* Wikipedia's entry on [Assertion](https://en.wikipedia.org/wiki/Assertion_(software_development).
+* Wikipedia's entry on [Design by Contract](https://en.wikipedia.org/wiki/Design_by_contract).
+* The elixir [Ex Contract](https://hexdocs.pm/ex_contract/readme.html) and [Oath](https://hexdocs.pm/oath/Oath.html) libraries expose a more conventional use of contracts.
+
+## A case for performance
+
+Lets try to compare our different implementations against each other
+and see if matches really do make a case for performance.
+
+```elixir
+Mix.install([:benchee])
+```
+
+The `obligatory_fields` set of functions have almost identical
+implementation, with the main difference being that one uses
+a guard clause and the other predicate logic:
+
+```elixir
+address = {:address, "México", "Baja California", "Tijuana", "22402", "Pacific Hills"}
+
+Benchee.run(%{
+  "match" => fn ->
+    assert_obligatory_fields.(address)
+  end,
+  "logic" => fn ->
+    check_obligatory_fields.(address)
+  end
+})
+```
+
+One more case, lets re-do a zip code assertion:
+
+```elixir
+assert_zip_code = fn
+  <<zip_code::binary-size(5)>> ->
+    for <<char <- zip_code>>,
+      do: (char - ?0) in 0..9 || raise("A Zip Code is only composed by 5 numeric digits")
+
+    :ok
+
+  _ ->
+    raise "A Zip Code is only composed by 5 numeric digits"
+end
+
+check_zip_code = fn record ->
+  record =~ ~r/^[0-9]{5}$/ || raise "A Zip Code is only composed by 5 numeric digits"
+  :ok
+end
+```
+
+```elixir
+Benchee.run(%{
+  "zip_match" => fn ->
+    assert_zip_code.("22422")
+  end,
+  "zip_logic" => fn ->
+    check_zip_code.("22422")
+  end
+})
+```
+
+This is just to say that matching early can really give us some 
+performance improvements.
