@@ -111,8 +111,8 @@ VerifiedProgram.sum_all(["1", "2", "3"])
 ```
 
 This style of verification shifts the focus a bit, rather than only checking input/output, we're
-now explicitly limiting the function reach; when something unexpected happens we halt the program
-and entirely try to give a reasonable error.
+now explicitly limiting the function reach; when something unexpected happens we halt the program 
+entirely and try to give a reasonable error.
 
 This is how the concept of "contracts" work in a very basic sense.
 
