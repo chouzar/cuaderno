@@ -630,3 +630,10 @@ Notes:
 * LISKOV
 * Hoare Logic
 * Wikipedia's article on assertion and Hoare
+
+So far the planned topics are:
+Part 1 - Introduction to Contract Programming
+Part 2 - Assertion Primitives
+Part 3 - Concepts, Preconditions, Postconditions and Invariants
+Part 4 - Building a simple "checker" function
+Part 5 - Beyond assertions, how far can we get?
