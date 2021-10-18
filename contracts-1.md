@@ -58,8 +58,6 @@ ExUnit.run()
 
 Finished in 0.00 seconds (0.00s async, 0.00s sync)
 4 tests, 0 failures
-
-Randomized with seed 71718
 ```
 
 In the example above we're taking `Program.sum_all/1` and verifying its behaviour by giving
@@ -145,8 +143,6 @@ ExUnit.run()
 
 Finished in 0.00 seconds (0.00s async, 0.00s sync)
 1 test, 0 failures
-
-Randomized with seed 71718
 ```
 
 And by just using our functions in runtime or test-time we can re-align the expectations of our
@@ -156,6 +152,7 @@ system components if requirements change:
 # Now we expect this to work
 VerifiedProgram.sum_all("1 2 3 4")
 ```
+
 ```output
 ** (ExUnit.AssertionError) 
 
@@ -172,8 +169,12 @@ to also include stringified numbers separated by a space.
 <!-- livebook:{"break_markdown":true} -->
 
 As we did in the examples above, there's nothing really stopping us from trying, the `assert` 
-keyword is a creative way to verify our system components; but I feel that ExUnit was designed in such
-a way as to be used in a test environment, not necessarilly at runtime.
+keyword is a creative way to verify our system components; I feel however that the failures 
+are designed in such a way as to be used in a test environment, not necessarilly at runtime.
+
+> **From the [docs](https://hexdocs.pm/ex_unit/ExUnit.Assertions.html):**
+> "_In general, a developer will want to use the general assert macro in tests. 
+> This macro introspects your code and provides good reporting whenever there is a failure._"
 
 Thankfully for us in Elixir we have a more primitive mechanism in which to assert data in 
 an effective way, [pattern matching](https://hexdocs.pm/elixir/patterns-and-guards.html#content);
@@ -183,6 +184,7 @@ I would like to explore this a bit more in the second installment of this contra
 
 * Contract programming is a technique to program verification that can be applied in Elixir.
 * Similar to testing, but we're not limited to only verify at test time.
+* We embedd assertions within our code to check for failures.
 * Although not endorsed, we may take advantage of `ExUnit` to do contracts in Elixir.
 * Other mechanisms native to erlang and elixir may be used to achieve similar results.
 
@@ -190,5 +192,6 @@ I would like to explore this a bit more in the second installment of this contra
 
 ### More info on contracts
 
+* Wikipedia's entry on [Assertion](https://en.wikipedia.org/wiki/Assertion_(software_development).
 * Wikipedia's entry on [Design by Contract](https://en.wikipedia.org/wiki/Design_by_contract).
-* Elixir [Ex Contract](https://hexdocs.pm/ex_contract/readme.html) library exposes us to a more conventional use of contracts within elixir.
+* The elixir [Ex Contract](https://hexdocs.pm/ex_contract/readme.html) and [Oath](https://hexdocs.pm/oath/Oath.html) libraries expose a more conventional use of contracts.
