@@ -622,7 +622,8 @@ Whoever, different types of process may not follow the logic stated above.
 * Loop invariants could be added during the loop, a custom function with a passing. 
 * Structure invariants would be equivalent to schema invariants constructor methods, check params, check output.
 * Invariants excel at entities that have a runtime, like a process or a GenServer, we could have constants through the whole life-cycle.
-* We can always relax requirements for an invariant by having the right datastructure and substituitin it with logic. A funny aspect of the `for` construct in elixir is that it implicitly relaxes requirements when we match for a field, not by crashing but by filtering.
+* We can always relax requirements for an invariant by having the right datastructure and substituitin it with logic. A funny aspect of the `for` construct in elixir is that it implicitly relaxes requirements when we match for a field, not by crashing but by filtering. La garantía de que el loop terminará esta implicita.
+* Podemos crear nuestro propio loop con garantía.
 
 Notes:
 
@@ -637,3 +638,5 @@ Part 2 - Assertion Primitives
 Part 3 - Concepts, Preconditions, Postconditions and Invariants
 Part 4 - Building a simple "checker" function
 Part 5 - Beyond assertions, how far can we get?
+
+## Pre conditions, Postconditions and invariantas and how do they fit in Elixir.
